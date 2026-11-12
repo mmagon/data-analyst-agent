@@ -1,0 +1,22 @@
+[project]
+name = "prudentia"
+version = "0.1.0"
+description = "Prudentia: a careful data-analyst agent built on the Mistral Agents SDK"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "mistralai-agents[koyeb]>=1.1.2,<1.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+
+[tool.mistralai.agents]
+entrypoint = "main:agent"
