@@ -39,7 +39,6 @@ def build_agent(with_sandbox: bool = True) -> agents.Agent:
         name="prudentia",
         instructions=INSTRUCTIONS,
         tools=[validate_csv, summarize_csv],
-        connectors=[agents.Connector("userLibrary")],
         environment=environment,
     )
 
