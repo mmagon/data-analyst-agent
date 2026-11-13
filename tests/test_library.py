@@ -21,7 +21,7 @@ class _FakeDocuments:
 
     def text_content(self, *, library_id: str, document_id: str, **kwargs):
         self._client.read_document = (library_id, document_id)
-        return SimpleNamespace(text_content="line1\n" + "x" * 100 + "\nlastline")
+        return SimpleNamespace(text="line1\n" + "x" * 100 + "\nlastline")
 
 
 class _FakeConversations:
