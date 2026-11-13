@@ -4,13 +4,13 @@
 
 ## What it does
 
-- Operates as a professional business and legal research advisor: precise, sourced, strategically minded. For factual claims it uses the built-in `web_search` connector (with `open_url` for full pages) and cites source URLs, preferring primary sources (statutes, courts, regulators, official registries, public filings); for calculations and data processing it uses the sandbox instead of mental math.
+- Operates as a professional business and legal research advisor: precise, sourced, strategically minded. For factual claims it calls its `web_search` tool (cited results via the Conversations API, run as the session user) and cites source URLs, preferring primary sources (statutes, courts, regulators, official registries, public filings); for calculations and data processing it uses the sandbox instead of mental math.
 - Never fabricates statutes, precedents, figures, or data. When uncertain, it gives the analytical framework, flags the uncertainty, and lists what would resolve it.
 - Ships two read-only tools, `validate_csv` and `summarize_csv`, for quick checks on pasted CSV text.
 - Gets a `MistralSandbox` environment with unrestricted outbound network (`network=agents.Network.all()`), so it can load files, clean data, run Python, and curl public sources in an isolated container.
-- Reads the workspace **Prudentia library** through the built-in `document_library` connector (`search_documents` / `list_documents` / `read_document`), always scoped to the library URI `doclib://01a1d114-3799-7489-b69a-af9698675b0f` — it never touches any other library.
+- Reads the workspace **Prudentia library** through its `library_list` / `library_search` / `library_read` tools (`prudentia/library.py`), which call the Libraries/Conversations API as the session user and are hard-scoped to library `01a1d114-3799-7489-b69a-af9698675b0f` (`doclib://01a1d114-3799-7489-b69a-af9698675b0f`) — they cannot touch any other library. (The builtin `document_library`/`web_search` connectors are not registered in this workspace, so the agent uses these tools instead.)
 - Can produce **encrypted backups of the Prudentia library to Google Drive** via the `google_drive_mcp` connector: it packs only library documents, encrypts them in the sandbox (AES-256, user-supplied passphrase, never persisted), and uploads the `.zip.enc` to a "Prudentia backups" folder. Drive writes go through the user's per-action approval.
-- The connectors run as the session user (on-behalf-of), so workspace sharing applies and the deployment stays hardened.
+- The `google_drive_mcp` connector and the library/web tools run as the session user (on-behalf-of), so workspace sharing applies and the deployment stays hardened.
 - Tracks open questions and pending research items across turns, and on wrap-up emits a state summary for re-seeding future sessions. Sessions persist server-side: the Dockerfile raises the limits to the deployed maximums (24 h idle, 7 days total), and any process can resume a session by id.
 - Hard safety boundary: legal and business research on public sources is fully in scope — statutes, published judgments, public court records and official registries (including in matters you are a party to), filings, market data. It never queries criminal-record/background-check sources about private individuals and never builds dossiers on people; genuine background checks go through counsel or licensed channels. It never places personal data in outputs, shared libraries, or public repos.
 
@@ -19,6 +19,7 @@
 ```
 main.py                  agent definition; exports `agent` (CLI entrypoint: main:agent)
 prudentia/tools.py       validate_csv / summarize_csv tools (pure stdlib logic)
+prudentia/library.py     library_list / library_read / library_search / web_search tools (Mistral API, OBO, read-only)
 monitor/hourly_scan.py   hourly market scan (yfinance): prices, volume anomalies, divergence signals -> JSON snapshot
 monitor/daily_brief.py   aggregates the day's scans into a daily intelligence brief JSON + summary
 tests/                   offline tests (ScriptedModel for the agent, stubbed yfinance for the monitor)
@@ -100,4 +101,4 @@ The monitor scripts run inside the session sandbox on scheduled turns (the sandb
 
 ## Prudentia library
 
-The workspace library **Prudentia** (`01a1d114-3799-7489-b69a-af9698675b0f`) is shared with the whole workspace at editor level, so the agent's `document_library` connector (running as the session user) can read it in every session — no per-chat attachment needed. The agent is instructed to scope all library calls to `doclib://01a1d114-3799-7489-b69a-af9698675b0f` and to never query any other library. Content rules for that library: non-sensitive reference material only. No personal data, no medical or legal case material, no third-party records; the private case libraries are not copied into it.
+The workspace library **Prudentia** (`01a1d114-3799-7489-b69a-af9698675b0f`) is shared with the whole workspace at editor level, so the agent's `library_*` tools (running as the session user) can read it in every session — no per-chat attachment needed. The tools are hard-scoped to `doclib://01a1d114-3799-7489-b69a-af9698675b0f` and cannot query any other library. Content rules for that library: non-sensitive reference material only. No personal data, no medical or legal case material, no third-party records; the private case libraries are not copied into it.
