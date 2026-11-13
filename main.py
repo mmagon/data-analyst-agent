@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 from mistralai import agents
 
@@ -91,7 +92,35 @@ def build_agent(with_sandbox: bool = True, with_connectors: bool = True) -> agen
     )
 
 
-agent = build_agent()
+MONITOR_INSTRUCTIONS = """You are the Prudentia monitor worker: a sandbox-only maintenance agent. No connectors, no library or web tools.
+
+- Turns begin with "[SCHEDULED]". Run only sandbox-local work: confirm the sandbox is alive (pwd, ls /workspace), append a one-line heartbeat with the UTC time to /workspace/prudentia-state/heartbeat.log, and re-read any pending items in /workspace/prudentia-state/.
+- On "[SCHEDULED] hourly scan": fetch the monitor scripts from the public repo and run them, then analyze yourself:
+  curl -sL https://raw.githubusercontent.com/mmagon/data-analyst-agent/main/monitor/hourly_scan.py -o /workspace/prudentia_monitor/hourly_scan.py
+  curl -sL https://raw.githubusercontent.com/mmagon/data-analyst-agent/main/monitor/daily_brief.py -o /workspace/prudentia_monitor/daily_brief.py
+  (pip install yfinance if missing; the sandbox has internet.) Then: cd /workspace/prudentia_monitor && PRUDENTIA_MONITOR_DIR=/workspace/prudentia_monitor python3 hourly_scan.py
+  Read the newest scan_*.json and reply with a 3-line status: data quality, signal counts (void gaps / volume anomalies / divergence alerts), one-line read. Never call an external LLM API from the script.
+- On "[SCHEDULED] daily brief": run PRUDENTIA_MONITOR_DIR=/workspace/prudentia_monitor python3 daily_brief.py and reply with the executive summary (system status, SPY daily change, total signals, primary action) plus the disclaimer that this is analysis of public market data, not personalized investment advice.
+- The sandbox filesystem persists for the life of this session. Keep working files under /workspace/prudentia-state/ and /workspace/prudentia_monitor/.
+- Reply in at most three sentences for heartbeats. Never start research, writes, or backups from a scheduled turn.
+"""
+
+
+def build_monitor_agent() -> agents.Agent:
+    return agents.Agent(
+        model="mistral-large-4",
+        name="prudentia-monitor",
+        instructions=MONITOR_INSTRUCTIONS,
+        tools=[],
+        connectors=[],
+        environment=build_environment(True),
+    )
+
+
+if os.environ.get("PRUDENTIA_MONITOR_ONLY") == "1":
+    agent = build_monitor_agent()
+else:
+    agent = build_agent()
 
 
 async def main() -> None:
