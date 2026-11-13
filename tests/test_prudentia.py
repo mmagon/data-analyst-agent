@@ -1,7 +1,12 @@
 import pytest
 from mistralai import agents
 
-from main import build_agent
+from main import (
+    CONNECTORS,
+    PRUDENTIA_LIBRARY_URI,
+    build_agent,
+    build_environment,
+)
 from prudentia.tools import summarize_csv_text, validate_csv_text
 
 CSV_OK = "name,age,score\nalice,30,9.5\nbob,25,7.0\ncarol,,8.25\n"
@@ -72,7 +77,7 @@ async def test_agent_calls_summarize_tool() -> None:
             agents.testing.reply("Summary: 3 rows, 3 columns."),
         ]
     )
-    state = await build_agent(with_sandbox=False).override(model=model).run(
+    state = await build_agent(with_sandbox=False, with_connectors=False).override(model=model).run(
         "Summarize this CSV:\n" + CSV_OK
     )
     assert isinstance(state, agents.Completed), state
@@ -80,3 +85,19 @@ async def test_agent_calls_summarize_tool() -> None:
     assert [call.name for call in state.tool_calls] == ["client.summarize_csv"]
     assert state.tool_calls[0].arguments["csv_text"] == CSV_OK
     model.assert_consumed()
+
+
+def test_agent_has_library_and_web_connectors() -> None:
+    assert sorted(slot.connector_name for slot in CONNECTORS) == [
+        "document_library",
+        "google_drive_mcp",
+        "web_search",
+    ]
+    assert PRUDENTIA_LIBRARY_URI in build_agent(with_sandbox=False, with_connectors=False).instructions
+
+
+def test_sandbox_has_unrestricted_network() -> None:
+    environment = build_environment(with_sandbox=True)
+    assert isinstance(environment, agents.MistralSandbox)
+    assert environment.network == agents.Network.all()
+    assert environment.ttl_seconds == 604800
