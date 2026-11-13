@@ -68,7 +68,7 @@ def library_read(document_id: str, max_chars: int = MAX_TEXT_CHARS) -> dict[str,
         )
     except Exception as exc:
         raise agents.ToolError(f"Could not read document {document_id}: {type(exc).__name__}.") from exc
-    text = getattr(response, "text_content", None) or getattr(response, "content", None) or ""
+    text = getattr(response, "text", None) or getattr(response, "text_content", None) or getattr(response, "content", None) or ""
     if not isinstance(text, str):
         text = str(text)
     return {
