@@ -22,4 +22,10 @@ RUN uv sync --no-dev \
 # The worker does not need root.
 USER agent
 
+# Session persistence limits (deployed maximums): stay alive 24h idle, 7 days total.
+# The execution timeout must cover the lifetime limit.
+ENV AGENTS_SDK_IDLE_TIMEOUT_SECONDS=86400 \
+    AGENTS_SDK_LIFETIME_LIMIT_SECONDS=604800 \
+    AGENTS_SDK_EXECUTION_TIMEOUT_SECONDS=608400
+
 CMD ["agents", "run-worker"]
