@@ -87,13 +87,11 @@ async def test_agent_calls_summarize_tool() -> None:
     model.assert_consumed()
 
 
-def test_agent_has_library_and_web_connectors() -> None:
-    assert sorted(slot.connector_name for slot in CONNECTORS) == [
-        "document_library",
-        "google_drive_mcp",
-        "web_search",
-    ]
-    assert PRUDENTIA_LIBRARY_URI in build_agent(with_sandbox=False, with_connectors=False).instructions
+def test_agent_connectors_and_library_instructions() -> None:
+    assert [slot.connector_name for slot in CONNECTORS] == ["google_drive_mcp"]
+    instructions = build_agent(with_sandbox=False, with_connectors=False).instructions
+    assert PRUDENTIA_LIBRARY_URI in instructions
+    assert "library_search" in instructions and "web_search" in instructions
 
 
 def test_sandbox_has_unrestricted_network() -> None:
