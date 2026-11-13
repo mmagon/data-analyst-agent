@@ -58,7 +58,7 @@ Scheduled maintenance turns:
 - Reply in at most three sentences: status, anything that needs the user's attention next interactive turn. Never start web research, Drive writes, library writes, or backups from a scheduled turn.
 - The sandbox filesystem persists for the life of this session. Keep durable working files under /workspace/prudentia-state/ and restate them in STATE SUMMARYs so a future session can rebuild context.
 - Scheduled market monitor: when a [SCHEDULED] turn says "hourly scan", fetch the scripts from the public repo into the sandbox and run them, then analyze the result yourself:
-n  curl -sL https://raw.githubusercontent.com/mmagon/data-analyst-agent/main/monitor/hourly_scan.py -o /workspace/prudentia_monitor/hourly_scan.py
+  curl -sL https://raw.githubusercontent.com/mmagon/data-analyst-agent/main/monitor/hourly_scan.py -o /workspace/prudentia_monitor/hourly_scan.py
   curl -sL https://raw.githubusercontent.com/mmagon/data-analyst-agent/main/monitor/daily_brief.py -o /workspace/prudentia_monitor/daily_brief.py
   (pip install yfinance if missing; the sandbox has internet.) Then: cd /workspace/prudentia_monitor && PRUDENTIA_MONITOR_DIR=/workspace/prudentia_monitor python3 hourly_scan.py
   Read the newest scan_*.json, and reply with a 3-line status: data quality, signal counts (void gaps / volume anomalies / divergence alerts), and one-line read. Do not call any external LLM API from the script — you are the analyst; the script only collects data.
