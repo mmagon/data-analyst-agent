@@ -119,3 +119,8 @@ The workspace library **Prudentia** (`01a1d114-3799-7489-b69a-af9698675b0f`) is 
   changes. Scheduled turns must fetch scripts at a **pinned commit SHA**, not `main`.
 - Dependencies are pinned (`requirements.txt`, `pyproject.toml`); the installed
   yfinance version is logged into each scan JSON under `environment`.
+
+## Docs
+
+- `docs/change-control.md` — change pipeline, prompt versioning, release-pinned fetch, filing conventions, `[SCHEDULED]` grammar, backups.
+- `docs/boot-engineering.md` — generic durable-state-across-disposable-sandboxes pattern (boot manifest, signed-URL protocol, boot subcommand, incremental boot, write cycle).
