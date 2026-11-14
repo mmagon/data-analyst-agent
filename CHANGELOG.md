@@ -1,0 +1,6 @@
+Changelog
+
+One line per change (what / why / who approved) — see docs/change-control.md §2.
+
+    2026-11-14 — Commit A (monitor hardening): UTC timestamps everywhere; fail-fast PRUDENTIA_MONITOR_DIR (exit 3, no silent ~/ default); durable run_log.jsonl + >90-min gap alert; per-ticker 10s timeout + 1 retry with STALE-on-failure reports; exit 0 whenever the report file is written; sha256 monitor/manifest.json with verify-before-run (stop-and-report on mismatch); pinned yfinance==1.8.0 logged into each scan JSON; release tag monitor-release pinned at 7bed484540ec4c80037021956b50a384af8664cb; separate short-lived monitor agent (PRUDENTIA_MONITOR_ONLY=1, pinned mistral-small-2603) with 2h idle timeout. Approved by Prudentia before commit.
+    2026-11-14 — Commit B: publish and implement the accepted [SCHEDULED] grammar (literal prefix; optional first-line JSON header {"kind", "ts_utc", "run_id"}; unknown wrappers logged and ignored, never silently skipped) in main.py instruction blocks and README; document expected PT1H overlap-skip / 2h idle-timeout behavior; golden test added. A5 FRAMEWORK_DEFAULT positioning labeling verified already landed in report v1.3 (74afa9f, b65a13a) — no monitor/ change in this commit, monitor/manifest.json untouched, tag monitor-release stays at 7bed484…. Approved by Prudentia before commit.
