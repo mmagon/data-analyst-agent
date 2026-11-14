@@ -23,8 +23,12 @@ RUN uv sync --no-dev \
 # The worker does not need root.
 USER agent
 
-# Session persistence limits (deployed maximums): stay alive 24h idle, 7 days total.
-ENV AGENTS_SDK_IDLE_TIMEOUT_SECONDS=86400 \
+# Session persistence limits for the monitor worker (usage mitigation): the PT1H
+# schedule resets the idle timer on every fire, so 2h idle leaves headroom for one
+# skipped tick while a stuck session dies after 2h idle instead of 24h. Lifetime
+# stays at the 7-day maximum so the day's scans and run_log survive for daily_brief
+# and audit. Execution timeout must cover the lifetime limit.
+ENV AGENTS_SDK_IDLE_TIMEOUT_SECONDS=7200 \
     AGENTS_SDK_LIFETIME_LIMIT_SECONDS=604800 \
     AGENTS_SDK_EXECUTION_TIMEOUT_SECONDS=608400
 
