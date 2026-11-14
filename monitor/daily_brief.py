@@ -110,7 +110,8 @@ def generate_recommendations(system_state: dict, trends: dict) -> dict:
         positioning = {"aggressive": 20, "defensive": 20, "cash": 60}
     return {
         "actions": actions,
-        "positioning": positioning,
+        # A5: positioning numbers are framework defaults, never statements about the user
+        "positioning": {"value": positioning, "kind": "FRAMEWORK_DEFAULT", "not_personal_advice": True},
         "urgency": "HIGH" if status in ("CRITICAL", "NERVOUS") else "NORMAL",
         "disclaimer": "Analytical summary of public market data, not personalized investment advice.",
     }
@@ -127,7 +128,7 @@ def generate_brief(snapshots: list[dict] | None = None) -> dict:
             "date": utcnow().strftime("%Y-%m-%d"),
             "generated_at": utcnow().isoformat(),
             "hourly_scans_processed": len(snapshots),
-            "report_version": "1.2",
+            "report_version": "1.3",
         },
         "executive_summary": {
             "system_status": system_state["status"],
