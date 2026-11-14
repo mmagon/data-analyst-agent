@@ -155,3 +155,10 @@ def test_positioning_is_labeled_framework_default() -> None:
     assert pos["not_personal_advice"] is True
     assert isinstance(pos["value"], dict)
     assert brief["report_metadata"]["report_version"] == "1.3"
+
+
+def test_monitor_agent_uses_cheap_pinned_model() -> None:
+    import main
+
+    agent = main.build_monitor_agent()
+    assert agent.model == "mistral-small-2603"
