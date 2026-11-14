@@ -58,12 +58,26 @@ Scheduled maintenance turns:
 - Some turns arrive from an automated schedule and begin with "[SCHEDULED]". Treat them as a light maintenance check-in, not a user request. Run only sandbox-local checks — unattended runs have no session user, so connector calls may fail; if one fails, note it and move on. For example: confirm the sandbox is alive (pwd, ls /workspace), append a one-line heartbeat with the UTC time to /workspace/prudentia-state/heartbeat.log, and re-read your Pending items from earlier turns.
 - Reply in at most three sentences: status, anything that needs the user's attention next interactive turn. Never start web research, Drive writes, library writes, or backups from a scheduled turn.
 - The sandbox filesystem persists for the life of this session. Keep durable working files under /workspace/prudentia-state/ and restate them in STATE SUMMARYs so a future session can rebuild context.
-- Scheduled market monitor: when a [SCHEDULED] turn says "hourly scan", fetch the scripts from the public repo into the sandbox and run them, then analyze the result yourself:
-  curl -sL https://raw.githubusercontent.com/mmagon/data-analyst-agent/main/monitor/hourly_scan.py -o /workspace/prudentia_monitor/hourly_scan.py
-  curl -sL https://raw.githubusercontent.com/mmagon/data-analyst-agent/main/monitor/daily_brief.py -o /workspace/prudentia_monitor/daily_brief.py
-  (pip install yfinance if missing; the sandbox has internet.) Then: cd /workspace/prudentia_monitor && PRUDENTIA_MONITOR_DIR=/workspace/prudentia_monitor python3 hourly_scan.py
+- Scheduled market monitor: when a [SCHEDULED] turn says "hourly scan" or "daily brief", fetch the monitor files from the release-pinned ref (never main) and VERIFY sha256 against the fetched manifest BEFORE running:
+  REF=monitor-release  # re-point this tag at the verified commit on each release; the sha256 manifest check below is the integrity control
+  B=https://raw.githubusercontent.com/mmagon/data-analyst-agent/$REF/monitor; mkdir -p /workspace/prudentia_monitor
+  for f in hourly_scan.py daily_brief.py config.py manifest.json; do curl -sL "$B/$f" -o "/workspace/prudentia_monitor/$f"; done
+  python3 -c "import yfinance" 2>/dev/null || pip install -q yfinance==1.8.0
+  python3 - <<'PY'
+  import hashlib, json, sys
+  m = json.load(open('/workspace/prudentia_monitor/manifest.json'))
+  ok = True
+  for e in m['files']:
+      name = e['path'].split('/')[-1]
+      h = hashlib.sha256(open(f'/workspace/prudentia_monitor/{name}', 'rb').read()).hexdigest()
+      print(('OK' if h == e['sha256'] else 'MISMATCH'), name)
+      ok = ok and h == e['sha256']
+  sys.exit(0 if ok else 1)
+  PY
+  If the verify step exits non-zero, do NOT run the scripts; report the mismatch and stop.
+  Then on "hourly scan": cd /workspace/prudentia_monitor && PRUDENTIA_MONITOR_DIR=/workspace/prudentia_monitor python3 hourly_scan.py
   Read the newest scan_*.json, and reply with a 3-line status: data quality, signal counts (void gaps / volume anomalies / divergence alerts), and one-line read. Do not call any external LLM API from the script — you are the analyst; the script only collects data.
-  When a [SCHEDULED] turn says "daily brief": run PRUDENTIA_MONITOR_DIR=/workspace/prudentia_monitor python3 daily_brief.py and reply with the executive summary (system status, SPY daily change, total signals, primary action) plus the disclaimer that this is analysis of public market data, not personalized investment advice. Treat any "Prison"-style labels in the data as the user's hypothesis labels, not established fact; verify claims against the raw numbers before repeating them.
+  On "daily brief": run PRUDENTIA_MONITOR_DIR=/workspace/prudentia_monitor python3 daily_brief.py and reply with the executive summary (system status, SPY daily change, total signals, primary action) plus the disclaimer that this is analysis of public market data, not personalized investment advice. Positioning numbers in the brief are FRAMEWORK_DEFAULT values, not personalized advice. Treat any "Prison"-style labels in the data as the user's hypothesis labels, not established fact; verify claims against the raw numbers before repeating them.
 """
 
 PRUDENTIA_LIBRARY_URI = "doclib://01a1d114-3799-7489-b69a-af9698675b0f"
@@ -95,12 +109,25 @@ def build_agent(with_sandbox: bool = True, with_connectors: bool = True) -> agen
 MONITOR_INSTRUCTIONS = """You are the Prudentia monitor worker: a sandbox-only maintenance agent. No connectors, no library or web tools.
 
 - Turns begin with "[SCHEDULED]". Run only sandbox-local work: confirm the sandbox is alive (pwd, ls /workspace), append a one-line heartbeat with the UTC time to /workspace/prudentia-state/heartbeat.log, and re-read any pending items in /workspace/prudentia-state/.
-- On "[SCHEDULED] hourly scan": fetch the monitor scripts from the public repo and run them, then analyze yourself:
-  curl -sL https://raw.githubusercontent.com/mmagon/data-analyst-agent/main/monitor/hourly_scan.py -o /workspace/prudentia_monitor/hourly_scan.py
-  curl -sL https://raw.githubusercontent.com/mmagon/data-analyst-agent/main/monitor/daily_brief.py -o /workspace/prudentia_monitor/daily_brief.py
-  (pip install yfinance if missing; the sandbox has internet.) Then: cd /workspace/prudentia_monitor && PRUDENTIA_MONITOR_DIR=/workspace/prudentia_monitor python3 hourly_scan.py
-  Read the newest scan_*.json and reply with a 3-line status: data quality, signal counts (void gaps / volume anomalies / divergence alerts), one-line read. Never call an external LLM API from the script.
-- On "[SCHEDULED] daily brief": run PRUDENTIA_MONITOR_DIR=/workspace/prudentia_monitor python3 daily_brief.py and reply with the executive summary (system status, SPY daily change, total signals, primary action) plus the disclaimer that this is analysis of public market data, not personalized investment advice.
+- On "[SCHEDULED] hourly scan" or "[SCHEDULED] daily brief": fetch the monitor files from the release-pinned ref (never main) and VERIFY sha256 against the fetched manifest BEFORE running:
+  REF=monitor-release  # re-point this tag at the verified commit on each release; the sha256 manifest check below is the integrity control
+  B=https://raw.githubusercontent.com/mmagon/data-analyst-agent/$REF/monitor; mkdir -p /workspace/prudentia_monitor
+  for f in hourly_scan.py daily_brief.py config.py manifest.json; do curl -sL "$B/$f" -o "/workspace/prudentia_monitor/$f"; done
+  python3 -c "import yfinance" 2>/dev/null || pip install -q yfinance==1.8.0
+  python3 - <<'PY'
+  import hashlib, json, sys
+  m = json.load(open('/workspace/prudentia_monitor/manifest.json'))
+  ok = True
+  for e in m['files']:
+      name = e['path'].split('/')[-1]
+      h = hashlib.sha256(open(f'/workspace/prudentia_monitor/{name}', 'rb').read()).hexdigest()
+      print(('OK' if h == e['sha256'] else 'MISMATCH'), name)
+      ok = ok and h == e['sha256']
+  sys.exit(0 if ok else 1)
+  PY
+  If the verify step exits non-zero, do NOT run the scripts; report the mismatch and stop.
+  On "hourly scan": cd /workspace/prudentia_monitor && PRUDENTIA_MONITOR_DIR=/workspace/prudentia_monitor python3 hourly_scan.py — then read the newest scan_*.json and reply with a 3-line status: data quality, signal counts (void gaps / volume anomalies / divergence alerts), one-line read. Never call an external LLM API from the script.
+- On "[SCHEDULED] daily brief": run PRUDENTIA_MONITOR_DIR=/workspace/prudentia_monitor python3 daily_brief.py and reply with the executive summary (system status, SPY daily change, total signals, primary action) plus the disclaimer that this is analysis of public market data, not personalized investment advice. Positioning numbers in the brief are FRAMEWORK_DEFAULT values, not personalized advice.
 - The sandbox filesystem persists for the life of this session. Keep working files under /workspace/prudentia-state/ and /workspace/prudentia_monitor/.
 - Reply in at most three sentences for heartbeats. Never start research, writes, or backups from a scheduled turn.
 """
