@@ -1,0 +1,3 @@
+# Pinned per Commit A hygiene (issue B2). Bump deliberately; the installed version
+# is logged into every scan JSON under report["environment"]["yfinance"].
+yfinance==1.8.0
