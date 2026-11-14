@@ -1,17 +1,35 @@
 #!/usr/bin/env python3
-"""Daily intelligence brief: aggregate today's hourly scan JSONs into one report."""
+"""Daily intelligence brief (Commit A hardened).
+
+vs 60d0f7b: UTC timestamps (fix B5); BASE_DIR/REPORT_DIR via monitor.config
+(fail-fast, fix B8); durable run log line per invocation (fix B9); report_version 1.2.
+Aggregation logic unchanged: globs scan_<UTC date>_*.json under BASE_DIR/data.
+"""
 
 import glob
 import json
 import os
+import sys
+import uuid
 from datetime import datetime
 
-BASE_DIR = os.environ.get("PRUDENTIA_MONITOR_DIR", os.path.expanduser("~/prudentia_monitor"))
-REPORT_DIR = os.path.join(BASE_DIR, "reports")
+import os as _os
+import sys as _sys
+
+try:  # package import (tests, `python -m monitor.hourly_scan`)
+    from monitor import config
+    from monitor.config import utcnow
+except ModuleNotFoundError:  # flat layout: run as `python3 hourly_scan.py` next to config.py
+    _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+    import config
+    from config import utcnow
+
+BASE_DIR = config.BASE_DIR
+REPORT_DIR = config.REPORT_DIR
 
 
 def compile_daily_data(today: str | None = None, base_dir: str = BASE_DIR) -> list[dict]:
-    today = today or datetime.now().strftime("%Y%m%d")
+    today = today or utcnow().strftime("%Y%m%d")
     scan_files = sorted(glob.glob(os.path.join(base_dir, "data", f"scan_{today}_*.json")))
     snapshots = []
     for file in scan_files:
@@ -106,10 +124,10 @@ def generate_brief(snapshots: list[dict] | None = None) -> dict:
     total_signals = sum(trends["signal_count"].values())
     brief = {
         "report_metadata": {
-            "date": datetime.now().strftime("%Y-%m-%d"),
-            "generated_at": datetime.now().isoformat(),
+            "date": utcnow().strftime("%Y-%m-%d"),
+            "generated_at": utcnow().isoformat(),
             "hourly_scans_processed": len(snapshots),
-            "report_version": "1.1",
+            "report_version": "1.2",
         },
         "executive_summary": {
             "system_status": system_state["status"],
@@ -129,10 +147,25 @@ def generate_brief(snapshots: list[dict] | None = None) -> dict:
     return brief
 
 
+def log_run(exit_code: int, status: str | None, error: str | None = None) -> None:
+    os.makedirs(config.BASE_DIR, exist_ok=True)
+    line = {
+        "ts_utc": utcnow().isoformat(),
+        "run_id": uuid.uuid4().hex[:12],
+        "script": os.path.basename(__file__),
+        "script_sha256": config.script_sha256(os.path.abspath(__file__)),
+        "exit_code": exit_code,
+        "system_status": status,
+        "error": error,
+    }
+    with open(config.RUN_LOG, "a") as f:
+        f.write(json.dumps(line) + "\n")
+
+
 def main() -> dict:
     brief = generate_brief()
     os.makedirs(REPORT_DIR, exist_ok=True)
-    filename = f"daily_brief_{datetime.now().strftime('%Y%m%d')}.json"
+    filename = f"daily_brief_{utcnow().strftime('%Y%m%d')}.json"
     filepath = os.path.join(REPORT_DIR, filename)
     with open(filepath, "w") as f:
         json.dump(brief, f, indent=2)
@@ -149,4 +182,11 @@ def main() -> dict:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        brief = main()
+    except Exception as exc:  # noqa: BLE001
+        log_run(exit_code=2, status=None, error=f"{type(exc).__name__}: {exc}")
+        print(f"FATAL: could not write brief: {exc}", file=sys.stderr)
+        sys.exit(2)
+    log_run(exit_code=0, status=brief["executive_summary"]["system_status"])
+    sys.exit(0)
