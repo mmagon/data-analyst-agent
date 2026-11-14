@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "mistralai-agents[koyeb]>=1.1.2,<1.2",
+    "yfinance==1.8.0",  # pinned per Commit A (issue B2); also in requirements.txt
 ]
 
 [dependency-groups]
