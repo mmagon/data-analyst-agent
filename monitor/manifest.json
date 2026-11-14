@@ -1,0 +1,14 @@
+{
+  "manifest_version": 1,
+  "note": "sha256 of load-bearing monitor scripts; bump manifest_version on any change; verify before run (playbook §2)",
+  "files": [
+    {
+      "path": "monitor/hourly_scan.py",
+      "sha256": "02a4523e1aa8e2ecc38b0d5f14a446e19dc70cdd8906f8b723b36a1962e99b2e"
+    },
+    {
+      "path": "monitor/daily_brief.py",
+      "sha256": "792c69f1961eec749387e76e02ba81a2b9dba9582e27104e4ed00eb21b10a0f5"
+    }
+  ]
+}
