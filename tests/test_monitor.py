@@ -144,3 +144,14 @@ def test_scan_timestamps_are_utc(monkeypatch: pytest.MonkeyPatch, tmp_path) -> N
     report = hourly_scan.main()
     assert report["timestamp"].endswith("+00:00")  # timezone-aware UTC (fix B5)
     assert "environment" in report and "script_sha256" in report["environment"]
+
+
+def test_positioning_is_labeled_framework_default() -> None:
+    from monitor import daily_brief
+
+    brief = daily_brief.generate_brief([])
+    pos = brief["tactical_recommendations"]["positioning"]
+    assert pos["kind"] == "FRAMEWORK_DEFAULT"
+    assert pos["not_personal_advice"] is True
+    assert isinstance(pos["value"], dict)
+    assert brief["report_metadata"]["report_version"] == "1.3"
