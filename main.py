@@ -135,7 +135,9 @@ MONITOR_INSTRUCTIONS = """You are the Prudentia monitor worker: a sandbox-only m
 
 def build_monitor_agent() -> agents.Agent:
     return agents.Agent(
-        model="mistral-large-4",
+        # Cheap pinned Small 4 for sandbox-only monitor turns (usage mitigation):
+        # dated ID per docs.mistral.ai/models guidance (pin over the -latest alias).
+        model="mistral-small-2603",
         name="prudentia-monitor",
         instructions=MONITOR_INSTRUCTIONS,
         tools=[],
