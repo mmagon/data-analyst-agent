@@ -125,3 +125,22 @@ def test_daily_brief_no_data(tmp_path) -> None:
     brief = daily_brief.generate_brief([])
     assert brief["executive_summary"]["system_status"] == "NO_DATA"
     assert brief["executive_summary"]["spy_daily_change_pct"] is None
+
+def test_config_fails_fast_without_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from monitor import config
+
+    monkeypatch.delenv("PRUDENTIA_MONITOR_DIR", raising=False)
+    monkeypatch.delenv("PRUDENTIA_MONITOR_ALLOW_DEFAULT", raising=False)
+    with pytest.raises(SystemExit):
+        config._base_dir()
+
+
+def test_scan_timestamps_are_utc(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    prices = {t: [(100.0, 1_000_000), (101.0, 1_000_000)] for t in ["SPY", "VTI", "IHE", "JEDI", "NCLD"]}
+    _install_fake_yfinance(monkeypatch, prices)
+    monkeypatch.setenv("PRUDENTIA_MONITOR_DIR", str(tmp_path))
+    from monitor import hourly_scan
+
+    report = hourly_scan.main()
+    assert report["timestamp"].endswith("+00:00")  # timezone-aware UTC (fix B5)
+    assert "environment" in report and "script_sha256" in report["environment"]
