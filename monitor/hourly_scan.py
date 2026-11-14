@@ -1,48 +1,97 @@
 #!/usr/bin/env python3
-"""Hourly market scan: fetch prices/volumes, compute divergence and anomaly signals, write a JSON snapshot."""
+"""Hourly market scan (Commit A hardened).
+
+vs 60d0f7b: UTC timestamps; concurrent per-ticker fetch with ~10s timeout + 1 retry;
+fetch errors are STALE data, not process failure; a report is ALWAYS written;
+exit 0 whenever the report file was written (data_quality carried in JSON, fix #2);
+durable run log appended to run_log.jsonl (fix #1); environment block logs the
+installed yfinance version and this script's sha256.
+"""
 
 import json
 import os
 import sys
 import time
-from datetime import datetime
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as pkg_version
+
+import os as _os
+import sys as _sys
+
+try:  # package import (tests, `python -m monitor.hourly_scan`)
+    from monitor import config
+    from monitor.config import utcnow
+except ModuleNotFoundError:  # flat layout: run as `python3 hourly_scan.py` next to config.py
+    _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+    import config
+    from config import utcnow
 
 ASSETS = {
     "benchmarks": ["SPY", "VTI"],
     "sentinels": ["IHE", "JEDI", "NCLD"],
 }
 
-BASE_DIR = os.environ.get("PRUDENTIA_MONITOR_DIR", os.path.expanduser("~/prudentia_monitor"))
-DATA_DIR = os.path.join(BASE_DIR, "data")
+FETCH_TIMEOUT_S = 10
+FETCH_RETRIES = 1
+RETRY_BACKOFF_S = 2.0
+
+
+def _yf_version() -> str:
+    try:
+        return pkg_version("yfinance")
+    except PackageNotFoundError:
+        return "not-installed"
+
+
+def _fetch_one(ticker: str) -> dict:
+    """One bounded fetch attempt. Never raises: errors become STALE data."""
+    import yfinance as yf
+
+    try:
+        hist = yf.Ticker(ticker).history(period="5d", interval="1h")
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"{type(exc).__name__}: {exc}", "timestamp": utcnow().isoformat()}
+    if hist is None or hist.empty:
+        return {"error": "no data", "timestamp": utcnow().isoformat()}
+    latest = hist.iloc[-1]
+    prev = hist.iloc[-2] if len(hist) > 1 else latest
+    avg_volume = float(hist["Volume"].mean()) if len(hist) > 1 else float(latest["Volume"])
+    close = float(latest["Close"])
+    prev_close = float(prev["Close"])
+    return {
+        "price": round(close, 2),
+        "volume": int(latest["Volume"]),
+        "avg_volume_5d": round(avg_volume, 0),
+        "price_change_pct": round((close - prev_close) / prev_close * 100, 2) if prev_close else 0.0,
+        "timestamp": utcnow().isoformat(),
+    }
 
 
 def fetch_market_data(assets: dict[str, list[str]]) -> dict:
-    import yfinance as yf
-
+    tickers = assets["benchmarks"] + assets["sentinels"]
     data: dict = {}
-    all_tickers = assets["benchmarks"] + assets["sentinels"]
-    for ticker in all_tickers:
-        try:
-            hist = yf.Ticker(ticker).history(period="5d", interval="1h")
-        except Exception as exc:
-            data[ticker] = {"error": str(exc), "timestamp": datetime.now().isoformat()}
-            continue
-        if hist is None or hist.empty:
-            data[ticker] = {"error": "no data", "timestamp": datetime.now().isoformat()}
-            continue
-        latest = hist.iloc[-1]
-        prev = hist.iloc[-2] if len(hist) > 1 else latest
-        avg_volume = float(hist["Volume"].mean()) if len(hist) > 1 else float(latest["Volume"])
-        close = float(latest["Close"])
-        prev_close = float(prev["Close"])
-        data[ticker] = {
-            "price": round(close, 2),
-            "volume": int(latest["Volume"]),
-            "avg_volume_5d": round(avg_volume, 0),
-            "price_change_pct": round((close - prev_close) / prev_close * 100, 2) if prev_close else 0.0,
-            "timestamp": datetime.now().isoformat(),
-        }
-        time.sleep(0.5)
+    with ThreadPoolExecutor(max_workers=min(8, len(tickers))) as pool:
+        futures = {}
+        for ticker in tickers:
+            futures[ticker] = pool.submit(_fetch_one, ticker)
+            time.sleep(0.25)  # gentle pacing against rate limits
+        for ticker, fut in futures.items():
+            attempts = 1
+            try:
+                data[ticker] = fut.result(timeout=FETCH_TIMEOUT_S)
+            except Exception:
+                # one retry, still bounded by the same timeout (fix #3)
+                attempts = 2
+                try:
+                    data[ticker] = pool.submit(_fetch_one, ticker).result(timeout=FETCH_TIMEOUT_S)
+                except Exception as exc:  # noqa: BLE001
+                    data[ticker] = {
+                        "error": f"timeout/failure after {attempts} attempts: {type(exc).__name__}: {exc}",
+                        "timestamp": utcnow().isoformat(),
+                    }
+            data[ticker]["attempts"] = attempts
     return data
 
 
@@ -96,15 +145,20 @@ def main() -> dict:
     signals = add_divergence_alerts(detect_signals(market_data), correlations)
     data_quality = "LIVE" if all("price" in v for v in market_data.values()) else "STALE"
     report = {
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": utcnow().isoformat(),
         "market_data": market_data,
         "correlations": correlations,
         "signals": signals,
         "data_quality": data_quality,
+        "environment": {
+            "python": sys.version.split()[0],
+            "yfinance": _yf_version(),
+            "script_sha256": config.script_sha256(os.path.abspath(__file__)),
+        },
     }
-    os.makedirs(DATA_DIR, exist_ok=True)
-    filename = f"scan_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
-    filepath = os.path.join(DATA_DIR, filename)
+    os.makedirs(config.DATA_DIR, exist_ok=True)
+    filename = f"scan_{utcnow().strftime('%Y%m%d_%H%M')}.json"
+    filepath = os.path.join(config.DATA_DIR, filename)
     with open(filepath, "w") as f:
         json.dump(report, f, indent=2)
     print(f"Scan complete: {filepath}")
@@ -113,5 +167,28 @@ def main() -> dict:
     return report
 
 
+def log_run(exit_code: int, data_quality: str | None, error: str | None = None) -> None:
+    """Append one heartbeat line per run (fix #1 / B9). Gap alert: no line for >90 min."""
+    os.makedirs(config.BASE_DIR, exist_ok=True)
+    line = {
+        "ts_utc": utcnow().isoformat(),
+        "run_id": uuid.uuid4().hex[:12],
+        "script": os.path.basename(__file__),
+        "script_sha256": config.script_sha256(os.path.abspath(__file__)),
+        "exit_code": exit_code,
+        "data_quality": data_quality,
+        "error": error,
+    }
+    with open(config.RUN_LOG, "a") as f:
+        f.write(json.dumps(line) + "\n")
+
+
 if __name__ == "__main__":
-    sys.exit(0 if main()["data_quality"] == "LIVE" else 1)
+    try:
+        report = main()
+    except Exception as exc:  # noqa: BLE001
+        log_run(exit_code=2, data_quality=None, error=f"{type(exc).__name__}: {exc}")
+        print(f"FATAL: could not write report: {exc}", file=sys.stderr)
+        sys.exit(2)  # non-zero ONLY when the report could not be written at all (fix #2)
+    log_run(exit_code=0, data_quality=report["data_quality"])
+    sys.exit(0)  # report written; quality is in the JSON, not the exit code
