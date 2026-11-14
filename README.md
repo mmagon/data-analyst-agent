@@ -102,3 +102,20 @@ The monitor scripts run inside the session sandbox on scheduled turns (the sandb
 ## Prudentia library
 
 The workspace library **Prudentia** (`01a1d114-3799-7489-b69a-af9698675b0f`) is shared with the whole workspace at editor level, so the agent's `library_*` tools (running as the session user) can read it in every session — no per-chat attachment needed. The tools are hard-scoped to `doclib://01a1d114-3799-7489-b69a-af9698675b0f` and cannot query any other library. Content rules for that library: non-sensitive reference material only. No personal data, no medical or legal case material, no third-party records; the private case libraries are not copied into it.
+
+## Monitor runtime contract (Commit A)
+
+- `PRUDENTIA_MONITOR_DIR` is **required** for the monitor scripts; they exit 3 if it is
+  unset (no silent `~/prudentia_monitor` fallback). Interactive override:
+  `PRUDENTIA_MONITOR_ALLOW_DEFAULT=1`.
+- All timestamps are UTC (`monitor.config.utcnow()`).
+- Every run appends one line to `<BASE_DIR>/run_log.jsonl` (ts_utc, run_id, script,
+  script_sha256, exit_code, data_quality/system_status, error). Alert if no hourly
+  line for > 90 min.
+- Exit codes: `0` = report file written (data quality is in the JSON, not the exit
+  code); `2` = report could not be written; `3` = missing env config.
+- Run `python3 scripts/verify_manifest.py` before executing monitor code fetched
+  from elsewhere; `--update` regenerates `monitor/manifest.json` after intentional
+  changes. Scheduled turns must fetch scripts at a **pinned commit SHA**, not `main`.
+- Dependencies are pinned (`requirements.txt`, `pyproject.toml`); the installed
+  yfinance version is logged into each scan JSON under `environment`.
